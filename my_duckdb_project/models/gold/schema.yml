@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: gold_customer_summary
+    description: Aggregated summary of customer orders, including total orders, spend, and average order value
+    columns:
+      - name: customer_id
+        description: Unique identifier for the customer (UUID)
+        tests:
+          - not_null
+          - unique
+      - name: customer_name
+        description: Customer's full name
+        tests:
+          - not_null
+      - name: total_orders
+        description: Total number of orders placed by the customer
+        tests:
+          - not_null
+          - accepted_values:
+              values: [">= 0"]
+      - name: total_spend
+        description: Total amount spent by the customer in cents
+        tests:
+          - not_null
+          - accepted_values:
+              values: [">= 0"]
+      - name: avg_order_value
+        description: Average order value for the customer in cents
+        tests:
+          - not_null
+          - accepted_values:
+              values: [">= 0"]
+
+
+#TODO: Add other models and their desriptions  

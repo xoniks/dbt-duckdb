@@ -1,0 +1,39 @@
+version: 2
+
+models:
+  - name: silver_items
+    description: Cleaned and enriched order items data, combining item details with product information
+    columns:
+      - name: item_id
+        description: Unique identifier for the order item (UUID)
+        tests:
+          - not_null
+          - unique
+      - name: order_id
+        description: Identifier for the order this item belongs to (UUID)
+        tests:
+          - not_null
+          - relationships:
+              to: ref('silver_orders')
+              field: order_id
+      - name: sku
+        description: Product stock-keeping unit (SKU)
+        tests:
+          - not_null
+          - relationships:
+              to: ref('bronze_products')
+              field: sku
+      - name: product_name
+        description: Name of the product
+        tests:
+          - not_null
+      - name: product_type
+        description: Type of the product (e.g., jaffle, beverage)
+      - name: product_price
+        description: Price of the product in cents
+        tests:
+          - not_null
+      - name: product_description
+        description: Description of the product
+
+#TODO: Add other models and their desriptions  
