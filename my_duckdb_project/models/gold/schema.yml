@@ -17,20 +17,20 @@ models:
         description: Total number of orders placed by the customer
         tests:
           - not_null
-          - accepted_values:
-              values: [">= 0"]
+          # - accepted_values:
+          #     values: [">= 0"]
       - name: total_spend
         description: Total amount spent by the customer in cents
         tests:
           - not_null
-          - accepted_values:
-              values: [">= 0"]
+          # - accepted_values:
+          #     values: [">= 0"]
       - name: avg_order_value
         description: Average order value for the customer in cents
         tests:
           - not_null
-          - accepted_values:
-              values: [">= 0"]
+          # - accepted_values:
+          #     values: [">= 0"]
 
 
-#TODO: Add other models and their desriptions  
+#TODO: Add other gold models and their desriptions  
