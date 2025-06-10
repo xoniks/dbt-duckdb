@@ -1,0 +1,32 @@
+name: my_duckdb_project
+version: '1.0.0'
+config-version: 2
+
+profile: my_duckdb_project
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  my_duckdb_project:
+    bronze:
+      +schema: main_bronze
+      materialized: table
+    silver:
+      +schema: mani_silver
+      materialized: table
+    gold:
+      +schema: main_gold
+      materialized: table
+
+seeds:
+  my_duckdb_project:
+    # +schema: main
