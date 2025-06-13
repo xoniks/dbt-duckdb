@@ -1,8 +1,8 @@
-name: my_duckdb_project
+name: my_databricks_project
 version: '1.0.0'
 config-version: 2
 
-profile: my_duckdb_project
+profile: default
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
@@ -15,18 +15,24 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+flags:
+  use_materialization_v2: true
+
 models:
-  my_duckdb_project:
+  my_databricks_project:
     bronze:
-      +schema: main_bronze
-      materialized: table
+      +materialized: table
+      +file_format: delta
+      +schema: bronze
     silver:
-      +schema: mani_silver
-      materialized: table
+      +materialized: table
+      +file_format: delta
+      +schema: silver
     gold:
-      +schema: main_gold
-      materialized: table
+      +materialized: table
+      +file_format: delta
+      +schema: gold
 
 seeds:
-  my_duckdb_project:
-    # +schema: main
+  my_databricks_project:
+    +file_format: delta

@@ -36,4 +36,4 @@ models:
       - name: product_description
         description: Description of the product
 
-#TODO: Add other models and their desriptions  
+#TODO: Add other silver models and their desriptions  

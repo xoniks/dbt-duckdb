@@ -1,7 +1,10 @@
-my_duckdb_project:
+default:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: 'database.duckdb'  # Path to the DuckDB file
-      schema: main
+      type: databricks
+      catalog: workspace
+      schema: default
+      host: <host>
+      http_path: <http_path>
+      token: <token>
