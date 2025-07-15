@@ -1,0 +1,42 @@
+name: my_databricks_project
+version: '1.0.0'
+config-version: 2
+
+profile: default
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+vars:
+  dbt_test_results:
+    absolute_schema: "test_results"  # This will create exactly "test_results" schema
+
+flags:
+  use_materialization_v2: true
+
+models:
+  my_databricks_project:
+    bronze:
+      +materialized: table
+      +file_format: delta
+      +schema: bronze
+    silver:
+      +materialized: table
+      +file_format: delta
+      +schema: silver
+    gold:
+      +materialized: table
+      +file_format: delta
+      +schema: gold
+
+seeds:
+  my_databricks_project:
+    +file_format: delta

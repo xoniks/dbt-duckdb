@@ -1,0 +1,3 @@
+packages:
+  - git: "https://github.com/xoniks/dbt-test-results.git"
+    revision: "main" 

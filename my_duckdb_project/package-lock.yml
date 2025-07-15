@@ -1,0 +1,4 @@
+packages:
+  - git: https://github.com/xoniks/dbt-test-results.git
+    revision: bde40ff31988db28fde83da70e150a597471b0fa
+sha1_hash: 21997342f648e96d93cc01a639cc240c6b534281

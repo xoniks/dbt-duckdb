@@ -1,0 +1,10 @@
+default:
+  target: dev
+  outputs:
+    dev:
+      type: databricks
+      catalog: workspace
+      schema: default
+      host: <host>
+      http_path: <http_path>
+      token: <token>
