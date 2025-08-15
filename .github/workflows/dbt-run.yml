@@ -1,0 +1,72 @@
+name: DBT Run via Airflow
+on:
+  repository_dispatch:
+    types: [run-dbt-model]
+
+jobs:
+  dbt-run:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+          
+      - name: Install dependencies
+        run: |
+          pip install dbt-core dbt-databricks
+          
+      - name: Configure dbt profile
+        run: |
+          mkdir -p ~/.dbt
+          cat > ~/.dbt/profiles.yml << EOF
+          default:
+            target: dev
+            outputs:
+              dev:
+                type: databricks
+                catalog: workspace
+                schema: default
+                host: ${{ secrets.DATABRICKS_HOST }}
+                http_path: ${{ secrets.DATABRICKS_HTTP_PATH }}
+                token: ${{ secrets.DATABRICKS_TOKEN }}
+          EOF
+          
+      - name: Debug dbt connection
+        run: |
+          cd my_duckdb_project
+          dbt debug
+          
+      - name: Run dbt deps (if needed)
+        run: |
+          cd my_duckdb_project
+          dbt deps || echo "No dependencies to install"
+          
+      - name: Run dbt model
+        run: |
+          cd my_duckdb_project
+          MODEL_NAME="${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
+          echo "Running dbt model: $MODEL_NAME"
+          dbt run --select $MODEL_NAME
+          
+      - name: Run dbt tests
+        run: |
+          cd my_duckdb_project
+          MODEL_NAME="${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
+          echo "Testing dbt model: $MODEL_NAME"
+          dbt test --select $MODEL_NAME
+          
+      - name: Generate dbt docs (optional)
+        run: |
+          cd my_duckdb_project
+          dbt docs generate
+          
+      - name: Report results
+        run: |
+          echo "✅ Successfully completed dbt workflow for model: ${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
+          echo "Triggered by: ${{ github.event.client_payload.triggered_by || 'unknown' }}"
+          echo "Timestamp: ${{ github.event.client_payload.timestamp || github.event.created_at }}"
