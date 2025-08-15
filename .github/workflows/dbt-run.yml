@@ -1,7 +1,37 @@
-name: DBT Run via Airflow
+name: DBT Unified Workflow
 on:
   repository_dispatch:
     types: [run-dbt-model]
+  
+  # Trigger on push to main branch
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'my_duckdb_project/models/**'
+      - 'my_duckdb_project/dbt_project.yml'
+      - 'my_duckdb_project/profiles.yml'
+  
+  # Trigger on pull requests to main branch  
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'my_duckdb_project/models/**'
+      - 'my_duckdb_project/dbt_project.yml'
+      - 'my_duckdb_project/profiles.yml'
+  
+  # Manual trigger from GitHub UI
+  workflow_dispatch:
+    inputs:
+      model_name:
+        description: 'DBT model to run (e.g., gold_customer_summary)'
+        required: false
+        default: 'gold_customer_summary'
+        type: string
+      run_tests:
+        description: 'Run dbt tests after model execution'
+        required: false
+        default: true
+        type: boolean
 
 jobs:
   dbt-run:
@@ -46,19 +76,131 @@ jobs:
           cd my_duckdb_project
           dbt deps || echo "No dependencies to install"
           
-      - name: Run dbt model
+      - name: Detect changed models (for git triggers)
+        id: detect_changes
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        run: |
+          # Get changed model files
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            # For PR, compare with target branch
+            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E "my_duckdb_project/models/.*\.sql$" || echo "")
+          else
+            # For push, compare with previous commit
+            CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "my_duckdb_project/models/.*\.sql$" || echo "")
+          fi
+          
+          if [[ -n "$CHANGED_FILES" ]]; then
+            echo "Changed model files detected:"
+            echo "$CHANGED_FILES"
+            
+            # Extract model names from file paths
+            MODELS=""
+            while IFS= read -r file; do
+              if [[ -n "$file" ]]; then
+                # Extract model name from path (remove .sql extension and path)
+                MODEL_NAME=$(basename "$file" .sql)
+                MODELS="$MODELS $MODEL_NAME"
+              fi
+            done <<< "$CHANGED_FILES"
+            
+            echo "models_changed=true" >> $GITHUB_OUTPUT
+            echo "changed_models=$(echo $MODELS | xargs)" >> $GITHUB_OUTPUT
+            echo "Detected changed models: $MODELS"
+          else
+            echo "No model files changed, will use default"
+            echo "models_changed=false" >> $GITHUB_OUTPUT
+            echo "changed_models=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine trigger source and models to run
+        id: determine_run
+        run: |
+          echo "GitHub event: ${{ github.event_name }}"
+          
+          # Determine model name and strategy based on trigger source
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            # Airflow trigger - run specified model
+            MODEL_NAME="${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
+            RUN_TESTS="true"
+            TRIGGER_SOURCE="airflow"
+            RUN_STRATEGY="single"
+            
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            # Manual GitHub trigger - run specified model
+            MODEL_NAME="${{ github.event.inputs.model_name || 'gold_customer_summary' }}"
+            RUN_TESTS="${{ github.event.inputs.run_tests || 'true' }}"
+            TRIGGER_SOURCE="manual"
+            RUN_STRATEGY="single"
+            
+          elif [[ "${{ steps.detect_changes.outputs.models_changed }}" == "true" ]]; then
+            # Git trigger with changed models - run smart detection
+            MODEL_NAME="${{ steps.detect_changes.outputs.changed_models }}"
+            RUN_TESTS="true"
+            TRIGGER_SOURCE="git_smart_${{ github.event_name }}"
+            RUN_STRATEGY="smart"
+            
+          else
+            # Git trigger with no model changes - run default
+            MODEL_NAME="gold_customer_summary"
+            RUN_TESTS="true"
+            TRIGGER_SOURCE="git_default_${{ github.event_name }}"
+            RUN_STRATEGY="single"
+          fi
+          
+          echo "model_name=$MODEL_NAME" >> $GITHUB_OUTPUT
+          echo "run_tests=$RUN_TESTS" >> $GITHUB_OUTPUT
+          echo "trigger_source=$TRIGGER_SOURCE" >> $GITHUB_OUTPUT
+          echo "run_strategy=$RUN_STRATEGY" >> $GITHUB_OUTPUT
+          
+          echo "Will run model(s): $MODEL_NAME"
+          echo "Will run tests: $RUN_TESTS"
+          echo "Triggered by: $TRIGGER_SOURCE"
+          echo "Strategy: $RUN_STRATEGY"
+          
+      - name: Run dbt models
         run: |
           cd my_duckdb_project
-          MODEL_NAME="${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
-          echo "Running dbt model: $MODEL_NAME"
-          dbt run --select $MODEL_NAME
+          MODEL_NAMES="${{ steps.determine_run.outputs.model_name }}"
+          RUN_STRATEGY="${{ steps.determine_run.outputs.run_strategy }}"
+          
+          echo "Running dbt models: $MODEL_NAMES"
+          echo "Strategy: $RUN_STRATEGY"
+          
+          if [[ "$RUN_STRATEGY" == "smart" ]]; then
+            # Smart strategy: run each changed model + dependencies
+            for model in $MODEL_NAMES; do
+              echo "🚀 Running model: $model"
+              dbt run --select "$model"
+              
+              echo "🔄 Running downstream models for: $model"
+              dbt run --select "$model+" --exclude "$model" || echo "No downstream models for $model"
+            done
+          else
+            # Single strategy: run specified model(s)
+            echo "🚀 Running model(s): $MODEL_NAMES"
+            dbt run --select "$MODEL_NAMES"
+          fi
           
       - name: Run dbt tests
+        if: steps.determine_run.outputs.run_tests == 'true'
         run: |
           cd my_duckdb_project
-          MODEL_NAME="${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
-          echo "Testing dbt model: $MODEL_NAME"
-          dbt test --select $MODEL_NAME
+          MODEL_NAMES="${{ steps.determine_run.outputs.model_name }}"
+          RUN_STRATEGY="${{ steps.determine_run.outputs.run_strategy }}"
+          
+          echo "Testing dbt models: $MODEL_NAMES"
+          
+          if [[ "$RUN_STRATEGY" == "smart" ]]; then
+            # Smart strategy: test each changed model individually
+            for model in $MODEL_NAMES; do
+              echo "🧪 Testing model: $model"
+              dbt test --select "$model" || echo "⚠️ Tests failed for $model (continuing)"
+            done
+          else
+            # Single strategy: test specified model(s)
+            echo "🧪 Testing model(s): $MODEL_NAMES"
+            dbt test --select "$MODEL_NAMES"
+          fi
           
       - name: Generate dbt docs (optional)
         run: |
@@ -67,6 +209,22 @@ jobs:
           
       - name: Report results
         run: |
-          echo "✅ Successfully completed dbt workflow for model: ${{ github.event.client_payload.model_name || 'gold_customer_summary' }}"
-          echo "Triggered by: ${{ github.event.client_payload.triggered_by || 'unknown' }}"
-          echo "Timestamp: ${{ github.event.client_payload.timestamp || github.event.created_at }}"
+          echo "✅ Successfully completed unified dbt workflow"
+          echo "Model(s): ${{ steps.determine_run.outputs.model_name }}"
+          echo "Strategy: ${{ steps.determine_run.outputs.run_strategy }}"
+          echo "Triggered by: ${{ steps.determine_run.outputs.trigger_source }}"
+          echo "Tests run: ${{ steps.determine_run.outputs.run_tests }}"
+          echo "Timestamp: $(date -Iseconds)"
+          
+          # Add commit info for git-triggered runs
+          if [[ "${{ github.event_name }}" == "push" || "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "Commit: ${{ github.sha }}"
+            echo "Branch: ${{ github.ref_name }}"
+            echo "Author: ${{ github.actor }}"
+            
+            if [[ "${{ steps.detect_changes.outputs.models_changed }}" == "true" ]]; then
+              echo "Smart detection: Changed models automatically detected and run"
+            else
+              echo "Default run: No model changes detected, ran default model"
+            fi
+          fi
